@@ -122,8 +122,10 @@ int main(int argc, char* argv[])
 	}
 	int rank, count, work_count;
 
-	MPI_Status status;
+	MPI_Status status1, status2;
 	MPI_Request req1,req2;
+
+	MPI_Request reqs[T_N*max_range*max_range];
 
 	MPI_Comm_size(MPI_COMM_WORLD, &count);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -153,20 +155,42 @@ int main(int argc, char* argv[])
 					for (j = 0; j < max_range; j++)
 						for (k = 0; k < max_range; k++)
 							M_1[i][j][k] = temperature_t(i, j, k, t, M_2);
+				if (rank < count - 1 && t < T_N)
+				{
+					printf("%3d try send to right%3d \n", rank, (t+1)*(rank*count+(rank+1)));
+					//MPI_Send(&M_2[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD);
+					MPI_Isend(&M_2[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank+1))]);
+					MPI_Wait(&reqs[(t+1)*(rank*count+(rank+1))], &status1);
+					printf("%3d sended to right \n", rank);
+				}
+				if (rank > 1 && t < T_N)
+				{
+					printf("%3d try send to left  %3d \n", rank, (t+1)*(rank*count+(rank-1)));
+					//MPI_Send(&M_2[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD);
+					MPI_Isend(&M_2[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank-1))]);
+					MPI_Wait(&reqs[(t+1)*(rank*count+(rank-1))], &status2);
+					printf("%3d sended to left \n", rank);
+				}
 			}
 			else
 			{
 				//получаем слева
 				if (rank > 1)
 				{
-					MPI_Irecv(&M_2[i_left-1][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (rank-1)*count+rank, MPI_COMM_WORLD, &req1);
-					MPI_Wait(&req1, &status);
+					printf("%3d try receive from left%3d \n", rank, t*((rank-1)*count+rank));
+					//MPI_Recv(&M_2[i_left-1][0][0], max_range*max_range, MPI_DOUBLE, rank-1, t*((rank-1)*count+rank), MPI_COMM_WORLD, &status1);
+					MPI_Irecv(&M_2[i_left-1][0][0], max_range*max_range, MPI_DOUBLE, rank-1, t*((rank-1)*count+rank), MPI_COMM_WORLD, &reqs[t*((rank-1)*count+rank)]);
+					//MPI_Wait(&reqs[t*((rank-1)*count+rank)], &status1);
+					printf("%3d reseived from left \n", rank);
 				}
 				//получаем справа
 				if (rank < count - 1)
 				{
-					MPI_Irecv(&M_2[i_right][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (rank+1)*count+rank, MPI_COMM_WORLD, &req2);
-					MPI_Wait(&req2, &status);
+					printf("%3d try receive from right%3d \n", rank, t*((rank+1)*count+rank));
+					//MPI_Recv(&M_2[i_right][0][0], max_range*max_range, MPI_DOUBLE, rank+1, t*((rank+1)*count+rank), MPI_COMM_WORLD, &status2);
+					MPI_Irecv(&M_2[i_right][0][0], max_range*max_range, MPI_DOUBLE, rank+1, t*((rank+1)*count+rank), MPI_COMM_WORLD, &reqs[t*((rank+1)*count+rank)]);
+					//MPI_Wait(&reqs[t*((rank+1)*count+rank)], &status2);
+					printf("%3d reseived from right \n", rank);
 				}
 				//считаем в M1
 				for (i = i_left; i < i_right; i++)
@@ -174,26 +198,34 @@ int main(int argc, char* argv[])
 						for (k = 0; k < max_range; k++)
 							M_1[i][j][k] = temperature_t(i,j,k,t,M_2);
 				//отправляем направо
-				if (rank < count - 1)
+				if (rank < count - 1 && t < T_N)
 				{
-					MPI_Isend(&M_2[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, rank*count+(rank+1), MPI_COMM_WORLD, &req1);
-					MPI_Wait(&req1, &status);
+					printf("%3d try send to right%3d \n", rank, (t+1)*(rank*count+(rank+1)));
+					//MPI_Send(&M_2[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD);
+					MPI_Isend(&M_2[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank+1))]);
+					MPI_Wait(&reqs[(t+1)*(rank*count+(rank+1))], &status1);
+					printf("%3d sended to right \n", rank);
 				}
 				//отправляем налево
-				if (rank > 1)
+				if (rank > 1 && t < T_N)
 				{
-					MPI_Isend(&M_2[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, rank*count+(rank-1), MPI_COMM_WORLD, &req2);
-					MPI_Wait(&req2, &status);
+					printf("%3d try send to left%3d \n", rank, (t+1)*(rank*count+(rank-1)));
+					//MPI_Send(&M_2[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD);
+					MPI_Isend(&M_2[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank-1))]);
+					MPI_Wait(&reqs[(t+1)*(rank*count+(rank-1))], &status2);
+					printf("%3d sended to left \n", rank);
 				}
+				
 			}
 			//Пишем свой блок в M_2
 			for (i = i_left; i < i_right; i++)
 				for (j = 0; j < max_range;j++)
 					for (k = 0; k < max_range;k++)
 						M_2[i][j][k] = M_1[i][j][k];
-			printf("T =%3d \n", t);
+			//printf("T =%3d \n", t);
 			//ДЛЯ ТЕСТА ВЫВОДИМ СВОЙ СЛОЙ
-			if (rank ==1)
+			if (t ==T_N && rank == 1)
+			{
 				for (i = i_left; i < i_right; i++)
 					{
 						printf("\n");
@@ -209,6 +241,7 @@ int main(int argc, char* argv[])
 						}
 					}
 					printf("\n");
+			}
 		}
 		//print_matrix(M_1);
 		//MPI_Send(&M_1[1][0][0],max_range*max_range,MPI_DOUBLE,0,52,MPI_COMM_WORLD);
@@ -216,6 +249,7 @@ int main(int argc, char* argv[])
 	}
 	else if (rank == 0)
 	{
+		printf("blaldlaldlfal");
 //		for (i = 0; i < max_range; i++)
 //						for (j = 0; j < max_range; j++)
 //							for (k = 0; k < max_range; k++) {
