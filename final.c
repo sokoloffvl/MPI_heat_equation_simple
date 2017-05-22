@@ -157,19 +157,15 @@ int main(int argc, char* argv[])
 							M_1[i][j][k] = temperature_t(i, j, k, t, M_2);
 				if (rank < count - 1 && t < T_N)
 				{
-					printf("%3d try send to right%3d \n", rank, (t+1)*(rank*count+(rank+1)));
 					//MPI_Send(&M_2[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD);
-					MPI_Isend(&M_2[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank+1))]);
-					MPI_Wait(&reqs[(t+1)*(rank*count+(rank+1))], &status1);
-					printf("%3d sended to right \n", rank);
+					MPI_Isend(&M_1[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank+1))]);
+					//MPI_Wait(&reqs[(t+1)*(rank*count+(rank+1))], &status1);
 				}
 				if (rank > 1 && t < T_N)
 				{
-					printf("%3d try send to left  %3d \n", rank, (t+1)*(rank*count+(rank-1)));
 					//MPI_Send(&M_2[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD);
-					MPI_Isend(&M_2[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank-1))]);
-					MPI_Wait(&reqs[(t+1)*(rank*count+(rank-1))], &status2);
-					printf("%3d sended to left \n", rank);
+					MPI_Isend(&M_1[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank-1))]);
+					//MPI_Wait(&reqs[(t+1)*(rank*count+(rank-1))], &status2);
 				}
 			}
 			else
@@ -177,20 +173,16 @@ int main(int argc, char* argv[])
 				//получаем слева
 				if (rank > 1)
 				{
-					printf("%3d try receive from left%3d \n", rank, t*((rank-1)*count+rank));
 					//MPI_Recv(&M_2[i_left-1][0][0], max_range*max_range, MPI_DOUBLE, rank-1, t*((rank-1)*count+rank), MPI_COMM_WORLD, &status1);
 					MPI_Irecv(&M_2[i_left-1][0][0], max_range*max_range, MPI_DOUBLE, rank-1, t*((rank-1)*count+rank), MPI_COMM_WORLD, &reqs[t*((rank-1)*count+rank)]);
-					//MPI_Wait(&reqs[t*((rank-1)*count+rank)], &status1);
-					printf("%3d reseived from left \n", rank);
+					MPI_Wait(&reqs[t*((rank-1)*count+rank)], &status1);
 				}
 				//получаем справа
 				if (rank < count - 1)
 				{
-					printf("%3d try receive from right%3d \n", rank, t*((rank+1)*count+rank));
 					//MPI_Recv(&M_2[i_right][0][0], max_range*max_range, MPI_DOUBLE, rank+1, t*((rank+1)*count+rank), MPI_COMM_WORLD, &status2);
 					MPI_Irecv(&M_2[i_right][0][0], max_range*max_range, MPI_DOUBLE, rank+1, t*((rank+1)*count+rank), MPI_COMM_WORLD, &reqs[t*((rank+1)*count+rank)]);
-					//MPI_Wait(&reqs[t*((rank+1)*count+rank)], &status2);
-					printf("%3d reseived from right \n", rank);
+					MPI_Wait(&reqs[t*((rank+1)*count+rank)], &status2);
 				}
 				//считаем в M1
 				for (i = i_left; i < i_right; i++)
@@ -200,20 +192,16 @@ int main(int argc, char* argv[])
 				//отправляем направо
 				if (rank < count - 1 && t < T_N)
 				{
-					printf("%3d try send to right%3d \n", rank, (t+1)*(rank*count+(rank+1)));
 					//MPI_Send(&M_2[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD);
-					MPI_Isend(&M_2[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank+1))]);
-					MPI_Wait(&reqs[(t+1)*(rank*count+(rank+1))], &status1);
-					printf("%3d sended to right \n", rank);
+					MPI_Isend(&M_1[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank+1))]);
+					//MPI_Wait(&reqs[(t+1)*(rank*count+(rank+1))], &status1);
 				}
 				//отправляем налево
 				if (rank > 1 && t < T_N)
 				{
-					printf("%3d try send to left%3d \n", rank, (t+1)*(rank*count+(rank-1)));
 					//MPI_Send(&M_2[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD);
-					MPI_Isend(&M_2[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank-1))]);
-					MPI_Wait(&reqs[(t+1)*(rank*count+(rank-1))], &status2);
-					printf("%3d sended to left \n", rank);
+					MPI_Isend(&M_1[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank-1))]);
+					//MPI_Wait(&reqs[(t+1)*(rank*count+(rank-1))], &status2);
 				}
 				
 			}
@@ -224,40 +212,32 @@ int main(int argc, char* argv[])
 						M_2[i][j][k] = M_1[i][j][k];
 			//printf("T =%3d \n", t);
 			//ДЛЯ ТЕСТА ВЫВОДИМ СВОЙ СЛОЙ
-			if (t ==T_N && rank == 1)
-			{
-				for (i = i_left; i < i_right; i++)
-					{
-						printf("\n");
-						printf("layer %3d \n", i);
-						printf("\n");
-						for (j = 0; j < max_range; j++)
-						{
-							for (k = 0; k < max_range; k++)
-							{
-								printf("%3f ", M_2[i][j][k]);
-							}
-							printf("\n");
-						}
-					}
-					printf("\n");
-			}
+			 if (t ==T_N)
+			 	printf("%3d finisssssssssssssssssss \n", rank);
 		}
 		//print_matrix(M_1);
-		//MPI_Send(&M_1[1][0][0],max_range*max_range,MPI_DOUBLE,0,52,MPI_COMM_WORLD);
+		//for (i = i_left; i < i_right; i++)
+		//{
+			//MPI_Isend(&M_2[i][0][0],max_range*max_range,MPI_DOUBLE,0,1,MPI_COMM_WORLD, &reqs[i]);
+		//}
+		//print_matrix(M_1);
+		MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank,MPI_COMM_WORLD);
 		//MPI_Send(&M_1,max_range,MPI_DOUBLE,0,52,MPI_COMM_WORLD);
 	}
 	else if (rank == 0)
 	{
-		printf("blaldlaldlfal");
-//		for (i = 0; i < max_range; i++)
-//						for (j = 0; j < max_range; j++)
-//							for (k = 0; k < max_range; k++) {
-//									M_2[i][j][k] = 0;
-//							}
-//		MPI_Recv(&M_2[2][0][0],max_range*max_range,MPI_DOUBLE,1,52,MPI_COMM_WORLD,&status);
-////		//MPI_Recv(&M_1,max_range,MPI_DOUBLE,1,52,MPI_COMM_WORLD,&status);
-//		print_matrix(M_2);
+		 for (i = 1; i < count; i++)
+		 {
+		 	i_left = 0 + (max_range / work_count) * (i - 1);
+		 	i_right = 0 + (max_range / work_count) * i;
+			if (i == count - 1 && i_right < max_range)
+				i_right = max_range;
+			printf("%3d rcv from. %3d %3d\n", i, i_left, i_right);
+		 	MPI_Recv(&M_2[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,i,i,MPI_COMM_WORLD,&status1);
+		 }
+		// //MPI_Recv(&M_2[2][0][0],max_range*max_range*2,MPI_DOUBLE,1,52,MPI_COMM_WORLD,&status1);
+		 print_matrix(M_2);
+		
 	}
 	MPI_Finalize();
 	return 0;
