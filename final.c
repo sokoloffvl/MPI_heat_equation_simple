@@ -109,16 +109,31 @@ void print_matrix(double arr[][max_range][max_range], double spentTime, char* fi
 	fclose(file);
 }
 
+void print_temperature(double arr[][max_range][max_range], int t, char* fileName)
+{	
+	int i, j, k;
+	FILE * file;
+	file = fopen(fileName, "w");
+	fprintf(file, "graph of t = %3d\n", t);	
+	fprintf(file,"----------------------------\n");				
+	for (i = 0; i < max_range; i++)
+	{
+		fprintf(file,"%3f\n", arr[i][max_range/2][max_range/2]);
+	}
+	fprintf(file,"\n");
+	fclose(file);
+}
+
 int main(int argc, char* argv[])
 {
 
 	int i, j, k, t;
 	int errCode;
 
-	max_range = 79;
+	max_range = 50;
 
-	double M_1[max_range][max_range][max_range];
 	double M_2[max_range][max_range][max_range];
+	double M_1[max_range][max_range][max_range];
 
 	double t_start, t_end;
 
@@ -126,7 +141,9 @@ int main(int argc, char* argv[])
 	h_y = (double)fabs(Y_N - Y_0) / (double)max_range;
 	h_z = (double)fabs(Z_N - Z_0) / (double)max_range;
 
-	tao = (1 / (2*sigma*((1/pow(h_x,2)) + (1/pow(h_y,2)) + (1/pow(h_z,2)))))-0.01;
+	tao = (1 / (2*sigma*((1/pow(h_x,2)) + (1/pow(h_y,2)) + (1/pow(h_z,2)))));
+	double delta_t = 1.0;//для удобства дебага. Если сделать delta_t = 1.0; То считаться будет быстро, так как меньше узлов будет по времени
+	double t_max = ceil((T_N-T_0)/((double)delta_t));
 
 	char* file1 = "my_2.txt";
 	char* file2 = "my_4.txt";
@@ -134,18 +151,13 @@ int main(int argc, char* argv[])
 	char* file4 = "my_10.txt";
 	char* file5 = "final.txt";
 
-	if ((errCode = MPI_Init(&argc, &argv)) != 0) // инициализация mpi
-	{
-		return errCode;
-	}
+	MPI_Init(&argc, &argv);// инициализация mpi
 	int rank, count, work_count;
-
-	long reqsSize = T_N*max_range*max_range;
 
 	MPI_Status status1, status2;
 	MPI_Request req1,req2;
 
-	MPI_Request reqs[reqsSize];
+	MPI_Request reqs[T_N*max_range*max_range];
 
 	MPI_Comm_size(MPI_COMM_WORLD, &count);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -167,7 +179,7 @@ int main(int argc, char* argv[])
 		//printf("process # %3d , my left = %3d, my right = %3d \n", rank, i_left, i_right);
 
 		//Расчет матрицы
-		for (t = T_0; t <= T_N; t++)
+		for (t = T_0; t <= t_max; t++)
 		{
 			if (t == 0)
 			{
@@ -178,12 +190,12 @@ int main(int argc, char* argv[])
 				//отправляем направо
 				if (rank < count - 1)
 				{
-					MPI_Isend(&M_1[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank+1))]);
+					MPI_Isend(&M_1[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD, &req1);
 				}
 				//отправляем налево
 				if (rank > 1)
 				{
-					MPI_Isend(&M_1[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank-1))]);
+					MPI_Isend(&M_1[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD, &req2);
 				}
 			}
 			else
@@ -191,14 +203,14 @@ int main(int argc, char* argv[])
 				//получаем слева
 				if (rank > 1)
 				{
-					MPI_Irecv(&M_2[i_left-1][0][0], max_range*max_range, MPI_DOUBLE, rank-1, t*((rank-1)*count+rank), MPI_COMM_WORLD, &reqs[t*((rank-1)*count+rank)]);
-					MPI_Wait(&reqs[t*((rank-1)*count+rank)], &status1);
+					MPI_Irecv(&M_2[i_left-1][0][0], max_range*max_range, MPI_DOUBLE, rank-1, t*((rank-1)*count+rank), MPI_COMM_WORLD, &req1);
+					MPI_Wait(&req1, &status1);
 				}
 				//получаем справа
 				if (rank < count - 1)
 				{
-					MPI_Irecv(&M_2[i_right][0][0], max_range*max_range, MPI_DOUBLE, rank+1, t*((rank+1)*count+rank), MPI_COMM_WORLD, &reqs[t*((rank+1)*count+rank)]);
-					MPI_Wait(&reqs[t*((rank+1)*count+rank)], &status2);
+					MPI_Irecv(&M_2[i_right][0][0], max_range*max_range, MPI_DOUBLE, rank+1, t*((rank+1)*count+rank), MPI_COMM_WORLD, &req2);
+					MPI_Wait(&req2, &status2);
 				}
 				//считаем в M1
 				for (i = i_left; i < i_right; i++)
@@ -208,15 +220,24 @@ int main(int argc, char* argv[])
 				//отправляем направо
 				if (rank < count - 1 && t < T_N)
 				{
-					MPI_Isend(&M_1[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank+1))]);
+					MPI_Isend(&M_1[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD, &req1);
 				}
 				//отправляем налево
 				if (rank > 1 && t < T_N)
 				{
-					MPI_Isend(&M_1[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank-1))]);
+					MPI_Isend(&M_1[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD, &req2);
 				}
 				
 			}
+			if (ceil(t*delta_t) == 2)
+				MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank*2,MPI_COMM_WORLD);
+			if (ceil(t*delta_t) == 4)
+				MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank*4,MPI_COMM_WORLD);
+			if (ceil(t*delta_t) == 6)
+				MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank*6,MPI_COMM_WORLD);
+			if (ceil(t*delta_t) == 10)
+				MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank*10,MPI_COMM_WORLD);
+
 			//Пишем свой блок в M_2
 			for (i = 0; i < max_range; i++)
 				for (j = 0; j < max_range; j++)
@@ -227,8 +248,44 @@ int main(int argc, char* argv[])
 	}
 	else if (rank == 0)
 	{
-		print_matrix(M_2, t_end-t_start,file5);
+		//print_matrix(M_2, t_end-t_start,file5);
 		t_start = MPI_Wtime();
+		for (i = 1; i < count; i++)
+		{
+		 	i_left = 0 + (max_range / work_count) * (i - 1);
+		 	i_right = 0 + (max_range / work_count) * i;
+			if (i == count - 1 && i_right < max_range)
+				i_right = max_range;
+		 	MPI_Recv(&M_2[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,i,i*2,MPI_COMM_WORLD,&status1);
+		}
+		print_temperature(M_2, 2, file1);
+		for (i = 1; i < count; i++)
+		{
+		 	i_left = 0 + (max_range / work_count) * (i - 1);
+		 	i_right = 0 + (max_range / work_count) * i;
+			if (i == count - 1 && i_right < max_range)
+				i_right = max_range;
+		 	MPI_Recv(&M_2[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,i,i*4,MPI_COMM_WORLD,&status1);
+		}
+		print_temperature(M_2, 4, file2);
+		for (i = 1; i < count; i++)
+		{
+		 	i_left = 0 + (max_range / work_count) * (i - 1);
+		 	i_right = 0 + (max_range / work_count) * i;
+			if (i == count - 1 && i_right < max_range)
+				i_right = max_range;
+		 	MPI_Recv(&M_2[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,i,i*6,MPI_COMM_WORLD,&status1);
+		}
+		print_temperature(M_2, 6, file3);
+		for (i = 1; i < count; i++)
+		{
+		 	i_left = 0 + (max_range / work_count) * (i - 1);
+		 	i_right = 0 + (max_range / work_count) * i;
+			if (i == count - 1 && i_right < max_range)
+				i_right = max_range;
+		 	MPI_Recv(&M_2[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,i,i*10,MPI_COMM_WORLD,&status1);
+		}
+		print_temperature(M_2, 10, file4);
 		for (i = 1; i < count; i++)
 		{
 		 	i_left = 0 + (max_range / work_count) * (i - 1);
