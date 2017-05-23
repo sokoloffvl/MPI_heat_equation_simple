@@ -16,9 +16,10 @@
 #define Z_N 2
 #define T_0 0
 #define T_N 10
-#define max_range 5
 
 #define sigma 0.01
+
+int max_range;
 
 //Шаги по координатам
 double h_x;
@@ -82,24 +83,30 @@ double temperature_t(int i, int j, int k, int t, double arr[][max_range][max_ran
 	return result;
 }
 //вывод матрицы на экран(потом переделаю для вывода в файл)
-void print_matrix(double arr[][max_range][max_range])
-{
+void print_matrix(double arr[][max_range][max_range], double spentTime, char* fileName)
+{	
 	int i, j, k;
+	FILE * file;
+	file = fopen(fileName, "w");
+	fprintf(file,"summary spent time:%3f\n", spentTime);
+	fprintf(file,"----------------------------\n");
+	fprintf(file, "Final result after all iteartions \n");					
 	for (i = 0; i < max_range; i++)
 	{
-		printf("\n");
-		printf("layer %3d \n", i);
-		printf("\n");
+		fprintf(file,"\n");
+		fprintf(file,"layer %3d \n", i);
+		fprintf(file,"\n");
 		for (j = 0; j < max_range; j++)
 		{
 			for (k = 0; k < max_range; k++)
 			{
-				printf("%3f ", arr[i][j][k]);
+				fprintf(file,"%3f ", arr[i][j][k]);
 			}
-			printf("\n");
+			fprintf(file,"\n");
 		}
 	}
-	printf("\n");
+	fprintf(file,"\n");
+	fclose(file);
 }
 
 int main(int argc, char* argv[])
@@ -107,8 +114,13 @@ int main(int argc, char* argv[])
 
 	int i, j, k, t;
 	int errCode;
+
+	max_range = 79;
+
 	double M_1[max_range][max_range][max_range];
 	double M_2[max_range][max_range][max_range];
+
+	double t_start, t_end;
 
 	h_x = (double)fabs(X_N - X_0) / (double)max_range;
 	h_y = (double)fabs(Y_N - Y_0) / (double)max_range;
@@ -116,16 +128,24 @@ int main(int argc, char* argv[])
 
 	tao = (1 / (2*sigma*((1/pow(h_x,2)) + (1/pow(h_y,2)) + (1/pow(h_z,2)))))-0.01;
 
+	char* file1 = "my_2.txt";
+	char* file2 = "my_4.txt";
+	char* file3 = "my_6.txt";
+	char* file4 = "my_10.txt";
+	char* file5 = "final.txt";
+
 	if ((errCode = MPI_Init(&argc, &argv)) != 0) // инициализация mpi
 	{
 		return errCode;
 	}
 	int rank, count, work_count;
 
+	long reqsSize = T_N*max_range*max_range;
+
 	MPI_Status status1, status2;
 	MPI_Request req1,req2;
 
-	MPI_Request reqs[T_N*max_range*max_range];
+	MPI_Request reqs[reqsSize];
 
 	MPI_Comm_size(MPI_COMM_WORLD, &count);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -155,17 +175,15 @@ int main(int argc, char* argv[])
 					for (j = 0; j < max_range; j++)
 						for (k = 0; k < max_range; k++)
 							M_1[i][j][k] = temperature_t(i, j, k, t, M_2);
-				if (rank < count - 1 && t < T_N)
+				//отправляем направо
+				if (rank < count - 1)
 				{
-					//MPI_Send(&M_2[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD);
 					MPI_Isend(&M_1[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank+1))]);
-					//MPI_Wait(&reqs[(t+1)*(rank*count+(rank+1))], &status1);
 				}
-				if (rank > 1 && t < T_N)
+				//отправляем налево
+				if (rank > 1)
 				{
-					//MPI_Send(&M_2[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD);
 					MPI_Isend(&M_1[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank-1))]);
-					//MPI_Wait(&reqs[(t+1)*(rank*count+(rank-1))], &status2);
 				}
 			}
 			else
@@ -173,14 +191,12 @@ int main(int argc, char* argv[])
 				//получаем слева
 				if (rank > 1)
 				{
-					//MPI_Recv(&M_2[i_left-1][0][0], max_range*max_range, MPI_DOUBLE, rank-1, t*((rank-1)*count+rank), MPI_COMM_WORLD, &status1);
 					MPI_Irecv(&M_2[i_left-1][0][0], max_range*max_range, MPI_DOUBLE, rank-1, t*((rank-1)*count+rank), MPI_COMM_WORLD, &reqs[t*((rank-1)*count+rank)]);
 					MPI_Wait(&reqs[t*((rank-1)*count+rank)], &status1);
 				}
 				//получаем справа
 				if (rank < count - 1)
 				{
-					//MPI_Recv(&M_2[i_right][0][0], max_range*max_range, MPI_DOUBLE, rank+1, t*((rank+1)*count+rank), MPI_COMM_WORLD, &status2);
 					MPI_Irecv(&M_2[i_right][0][0], max_range*max_range, MPI_DOUBLE, rank+1, t*((rank+1)*count+rank), MPI_COMM_WORLD, &reqs[t*((rank+1)*count+rank)]);
 					MPI_Wait(&reqs[t*((rank+1)*count+rank)], &status2);
 				}
@@ -192,51 +208,39 @@ int main(int argc, char* argv[])
 				//отправляем направо
 				if (rank < count - 1 && t < T_N)
 				{
-					//MPI_Send(&M_2[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD);
 					MPI_Isend(&M_1[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank+1))]);
-					//MPI_Wait(&reqs[(t+1)*(rank*count+(rank+1))], &status1);
 				}
 				//отправляем налево
 				if (rank > 1 && t < T_N)
 				{
-					//MPI_Send(&M_2[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD);
 					MPI_Isend(&M_1[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD, &reqs[(t+1)*(rank*count+(rank-1))]);
-					//MPI_Wait(&reqs[(t+1)*(rank*count+(rank-1))], &status2);
 				}
 				
 			}
 			//Пишем свой блок в M_2
-			for (i = i_left; i < i_right; i++)
-				for (j = 0; j < max_range;j++)
-					for (k = 0; k < max_range;k++)
+			for (i = 0; i < max_range; i++)
+				for (j = 0; j < max_range; j++)
+					for (k = 0; k < max_range; k++)
 						M_2[i][j][k] = M_1[i][j][k];
-			//printf("T =%3d \n", t);
-			//ДЛЯ ТЕСТА ВЫВОДИМ СВОЙ СЛОЙ
-			 if (t ==T_N)
-			 	printf("%3d finisssssssssssssssssss \n", rank);
 		}
-		//print_matrix(M_1);
-		//for (i = i_left; i < i_right; i++)
-		//{
-			//MPI_Isend(&M_2[i][0][0],max_range*max_range,MPI_DOUBLE,0,1,MPI_COMM_WORLD, &reqs[i]);
-		//}
-		//print_matrix(M_1);
 		MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank,MPI_COMM_WORLD);
-		//MPI_Send(&M_1,max_range,MPI_DOUBLE,0,52,MPI_COMM_WORLD);
 	}
 	else if (rank == 0)
 	{
-		 for (i = 1; i < count; i++)
-		 {
+		print_matrix(M_2, t_end-t_start,file5);
+		t_start = MPI_Wtime();
+		for (i = 1; i < count; i++)
+		{
 		 	i_left = 0 + (max_range / work_count) * (i - 1);
 		 	i_right = 0 + (max_range / work_count) * i;
 			if (i == count - 1 && i_right < max_range)
 				i_right = max_range;
-			printf("%3d rcv from. %3d %3d\n", i, i_left, i_right);
 		 	MPI_Recv(&M_2[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,i,i,MPI_COMM_WORLD,&status1);
-		 }
-		// //MPI_Recv(&M_2[2][0][0],max_range*max_range*2,MPI_DOUBLE,1,52,MPI_COMM_WORLD,&status1);
-		 print_matrix(M_2);
+		}
+		t_end = MPI_Wtime();
+		print_matrix(M_2, t_end-t_start,file5);
+		printf("Done \n");
+		printf("spent time = %3f \n", t_end-t_start);
 		
 	}
 	MPI_Finalize();
