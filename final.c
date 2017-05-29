@@ -1,5 +1,3 @@
-// ConsoleApplication2.cpp:
-//
 //mpicc -o final final.c -lm
 //mpirun -np 2 final
 #include <stdio.h> 
@@ -19,7 +17,7 @@
 
 #define sigma 0.01
 
-int max_range;
+#define max_range 200
 
 //Шаги по координатам
 double h_x;
@@ -44,7 +42,7 @@ double z_(int k)
 }
 
 //Функция расчета следущего узла
-double temperature_t(int i, int j, int k, int t, double arr[][max_range][max_range])
+double temperature_t(int i, int j, int k, int t, double*** arr)
 {
 	double result = -1;
 		if (i == 0)
@@ -82,8 +80,8 @@ double temperature_t(int i, int j, int k, int t, double arr[][max_range][max_ran
 		}
 	return result;
 }
-//вывод матрицы на экран(потом переделаю для вывода в файл)
-void print_matrix(double arr[][max_range][max_range], double spentTime, char* fileName)
+//вывод матрицы на экран
+void print_matrix(double*** arr, double spentTime, char* fileName)
 {	
 	int i, j, k;
 	FILE * file;
@@ -109,7 +107,7 @@ void print_matrix(double arr[][max_range][max_range], double spentTime, char* fi
 	fclose(file);
 }
 
-void print_temperature(double arr[][max_range][max_range], int t, char* fileName)
+void print_temperature(double*** arr, int t, char* fileName)
 {	
 	int i, j, k;
 	FILE * file;
@@ -124,16 +122,31 @@ void print_temperature(double arr[][max_range][max_range], int t, char* fileName
 	fclose(file);
 }
 
+double*** arr3dAlloc(const int range)
+{
+  int i;
+  int j;
+  double*** array = (double***) malloc( (range * sizeof(double*)) + (range*range * sizeof(double**)) + (range*range*range * sizeof(double)) );
+  for(i = 0; i < range; ++i) {
+    array[i] = (double**)(array + range) + i * range;
+    for(j = 0; j < range; ++j) {
+      array[i][j] = (double*)(array + range + range*range) + i*range*range + j*range;
+    }
+  }
+  return array;
+}
+
 int main(int argc, char* argv[])
 {
 
-	int i, j, k, t;
+	int i, j, k;
+	int t;//итератор t
 	int errCode;
 
-	max_range = 50;
-
-	double M_2[max_range][max_range][max_range];
-	double M_1[max_range][max_range][max_range];
+	double*** M_1 = arr3dAlloc(max_range);
+	double*** M_2 = arr3dAlloc(max_range);
+	//double M_2[max_range][max_range][max_range]; //значения в пред момент времени
+	//double M_1[max_range][max_range][max_range]; //текущая матрица
 
 	double t_start, t_end;
 
@@ -142,14 +155,20 @@ int main(int argc, char* argv[])
 	h_z = (double)fabs(Z_N - Z_0) / (double)max_range;
 
 	tao = (1 / (2*sigma*((1/pow(h_x,2)) + (1/pow(h_y,2)) + (1/pow(h_z,2)))));
-	double delta_t = 1.0;//для удобства дебага. Если сделать delta_t = 1.0; То считаться будет быстро, так как меньше узлов будет по времени
-	double t_max = ceil((T_N-T_0)/((double)delta_t));
+	double delta_t = 1.0; //шаг времени
+	int t_max = ceil((T_N-T_0)/((double)delta_t)); //кол-во шагов времени 
+	 
 
-	char* file1 = "my_2.txt";
-	char* file2 = "my_4.txt";
-	char* file3 = "my_6.txt";
-	char* file4 = "my_10.txt";
-	char* file5 = "final.txt";
+	int t_2 = ceil((2-T_0)/((double)delta_t));
+	int t_4 = ceil((4-T_0)/((double)delta_t));
+	int t_6 = ceil((6-T_0)/((double)delta_t));
+	int t_10 = ceil((T_N-T_0)/((double)delta_t));
+
+	char* file1 = "my_2.txt"; //время=2
+	char* file2 = "my_4.txt"; //время=4
+	char* file3 = "my_6.txt"; //время=6
+	char* file4 = "my_10.txt"; //время=10
+	char* file5 = "final.txt"; //после всех выч-ий
 
 	MPI_Init(&argc, &argv);// инициализация mpi
 	int rank, count, work_count;
@@ -164,21 +183,21 @@ int main(int argc, char* argv[])
 
 	//левая и правая граница ответственности каждого процесса
 	int i_left, i_right;
-	//число "считающих процессов", нулевой процесс будет дерижировать
+	//число "считающих процессов", нулевой главн
 	work_count = count - 1;
 
 	if (rank > 0)
 	{
 		//определяем границы для процесса № rank
-		i_left = 0 + (max_range / work_count) * (rank - 1);
-		i_right = 0 + (max_range / work_count) * rank;
+		i_left = (max_range / work_count) * (rank - 1);
+		i_right = (max_range / work_count) * rank;
 
 		if (rank == count - 1 && i_right < max_range)
 			i_right = max_range; //поправляем размер слоя для у процесса с последним слоем
 
 		//printf("process # %3d , my left = %3d, my right = %3d \n", rank, i_left, i_right);
 
-		//Расчет матрицы
+		//расчет матрицы
 		for (t = T_0; t <= t_max; t++)
 		{
 			if (t == 0)
@@ -188,12 +207,12 @@ int main(int argc, char* argv[])
 						for (k = 0; k < max_range; k++)
 							M_1[i][j][k] = temperature_t(i, j, k, t, M_2);
 				//отправляем направо
-				if (rank < count - 1)
+				if (rank < count - 1) //если не последний
 				{
 					MPI_Isend(&M_1[i_right-1][0][0], max_range*max_range, MPI_DOUBLE, rank+1, (t+1)*(rank*count+(rank+1)), MPI_COMM_WORLD, &req1);
 				}
 				//отправляем налево
-				if (rank > 1)
+				if (rank > 1) //если не первый
 				{
 					MPI_Isend(&M_1[i_left][0][0], max_range*max_range, MPI_DOUBLE, rank-1, (t+1)*(rank*count+(rank-1)), MPI_COMM_WORLD, &req2);
 				}
@@ -201,13 +220,13 @@ int main(int argc, char* argv[])
 			else
 			{
 				//получаем слева
-				if (rank > 1)
+				if (rank > 1)//получаеют все, кроме первого 
 				{
 					MPI_Irecv(&M_2[i_left-1][0][0], max_range*max_range, MPI_DOUBLE, rank-1, t*((rank-1)*count+rank), MPI_COMM_WORLD, &req1);
 					MPI_Wait(&req1, &status1);
 				}
 				//получаем справа
-				if (rank < count - 1)
+				if (rank < count - 1)//получают все, кроме последнего
 				{
 					MPI_Irecv(&M_2[i_right][0][0], max_range*max_range, MPI_DOUBLE, rank+1, t*((rank+1)*count+rank), MPI_COMM_WORLD, &req2);
 					MPI_Wait(&req2, &status2);
@@ -229,71 +248,83 @@ int main(int argc, char* argv[])
 				}
 				
 			}
-			if (ceil(t*delta_t) == 2)
-				MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank*2,MPI_COMM_WORLD);
-			if (ceil(t*delta_t) == 4)
-				MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank*4,MPI_COMM_WORLD);
-			if (ceil(t*delta_t) == 6)
-				MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank*6,MPI_COMM_WORLD);
-			if (ceil(t*delta_t) == 10)
-				MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank*10,MPI_COMM_WORLD);
 
-			//Пишем свой блок в M_2
+			/*if (t == t_2)
+				MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank*2,MPI_COMM_WORLD);
+			if (t == t_4)
+				MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank*4,MPI_COMM_WORLD);
+			if (t == t_6)
+				MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank*6,MPI_COMM_WORLD);
+			if (t == t_10)
+				MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank*10,MPI_COMM_WORLD);
+*/
+			//пишем свой блок в M_2
 			for (i = 0; i < max_range; i++)
 				for (j = 0; j < max_range; j++)
 					for (k = 0; k < max_range; k++)
 						M_2[i][j][k] = M_1[i][j][k];
 		}
-		MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank,MPI_COMM_WORLD);
+		//MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank,MPI_COMM_WORLD);
 	}
 	else if (rank == 0)
 	{
-		//print_matrix(M_2, t_end-t_start,file5);
+		
 		t_start = MPI_Wtime();
+		/*
+		//собираем для время=2
 		for (i = 1; i < count; i++)
 		{
-		 	i_left = 0 + (max_range / work_count) * (i - 1);
-		 	i_right = 0 + (max_range / work_count) * i;
+		 	i_left = (max_range / work_count) * (i - 1);
+		 	i_right = (max_range / work_count) * i;
 			if (i == count - 1 && i_right < max_range)
 				i_right = max_range;
 		 	MPI_Recv(&M_2[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,i,i*2,MPI_COMM_WORLD,&status1);
 		}
 		print_temperature(M_2, 2, file1);
+		
+		//собираем для время=4
 		for (i = 1; i < count; i++)
 		{
-		 	i_left = 0 + (max_range / work_count) * (i - 1);
-		 	i_right = 0 + (max_range / work_count) * i;
+		 	i_left = (max_range / work_count) * (i - 1);
+		 	i_right = (max_range / work_count) * i;
 			if (i == count - 1 && i_right < max_range)
 				i_right = max_range;
 		 	MPI_Recv(&M_2[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,i,i*4,MPI_COMM_WORLD,&status1);
 		}
 		print_temperature(M_2, 4, file2);
+		
+		//собираем для время=6
 		for (i = 1; i < count; i++)
 		{
-		 	i_left = 0 + (max_range / work_count) * (i - 1);
-		 	i_right = 0 + (max_range / work_count) * i;
+		 	i_left = (max_range / work_count) * (i - 1);
+		 	i_right = (max_range / work_count) * i;
 			if (i == count - 1 && i_right < max_range)
 				i_right = max_range;
 		 	MPI_Recv(&M_2[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,i,i*6,MPI_COMM_WORLD,&status1);
 		}
 		print_temperature(M_2, 6, file3);
+		
+		//собираем для время=10
 		for (i = 1; i < count; i++)
 		{
-		 	i_left = 0 + (max_range / work_count) * (i - 1);
-		 	i_right = 0 + (max_range / work_count) * i;
+		 	i_left = (max_range / work_count) * (i - 1);
+		 	i_right = (max_range / work_count) * i;
 			if (i == count - 1 && i_right < max_range)
 				i_right = max_range;
 		 	MPI_Recv(&M_2[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,i,i*10,MPI_COMM_WORLD,&status1);
 		}
-		print_temperature(M_2, 10, file4);
-		for (i = 1; i < count; i++)
+		print_temperature(M_2, 10, file4);*/
+		
+		//СОБИРАЕМ КОНЕЧНЫЙ РЕЗУЛЬТАТ, СЛОЙ ПО X
+		FOR (I = 1; I < COUNT; I++)
 		{
-		 	i_left = 0 + (max_range / work_count) * (i - 1);
-		 	i_right = 0 + (max_range / work_count) * i;
-			if (i == count - 1 && i_right < max_range)
-				i_right = max_range;
-		 	MPI_Recv(&M_2[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,i,i,MPI_COMM_WORLD,&status1);
-		}
+		 	I_LEFT = (MAX_RANGE / WORK_COUNT) * (I - 1);
+		 	I_RIGHT = (MAX_RANGE / WORK_COUNT) * I;
+			IF (I == COUNT - 1 && I_RIGHT < MAX_RANGE)
+				I_RIGHT = MAX_RANGE;
+		 	MPI_RECV(&M_2[I_LEFT][0][0],MAX_RANGE*MAX_RANGE*(I_RIGHT-I_LEFT),MPI_DOUBLE,I,I,MPI_COMM_WORLD,&STATUS1);
+		} 
+
 		t_end = MPI_Wtime();
 		print_matrix(M_2, t_end-t_start,file5);
 		printf("Done \n");
@@ -303,4 +334,3 @@ int main(int argc, char* argv[])
 	MPI_Finalize();
 	return 0;
 }
-
