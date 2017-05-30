@@ -264,7 +264,7 @@ int main(int argc, char* argv[])
 					for (k = 0; k < max_range; k++)
 						M_2[i][j][k] = M_1[i][j][k];
 		}
-		//MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank,MPI_COMM_WORLD);
+		MPI_Send(&M_1[i_left][0][0],max_range*max_range*(i_right-i_left),MPI_DOUBLE,0,rank,MPI_COMM_WORLD);
 	}
 	else if (rank == 0)
 	{
